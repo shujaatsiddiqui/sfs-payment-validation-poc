@@ -35,9 +35,71 @@ public class PaymentController : ControllerBase
         { "PAY-004", new Payment { PaymentId = "PAY-004", CreditAmount = 0, FIC_CLSFD_CD = 93, AccountNumber = "ACC-004" } }
     };
 
+    // Mock pending payments queue
+    private static readonly List<PaymentItem> PendingPayments = new()
+    {
+        new PaymentItem { Id = "PAY-001", Amount = 1000 },
+        new PaymentItem { Id = "PAY-002", Amount = 500 },
+        new PaymentItem { Id = "PAY-003", Amount = 800 },
+        new PaymentItem { Id = "PAY-004", Amount = 50 },
+        new PaymentItem { Id = "PAY-006", Amount = 100 }
+    };
+
     public PaymentController(ILogger<PaymentController> logger)
     {
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Retrieves pending payments that need to be processed.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint returns a list of payments waiting to be validated and posted.
+    /// The Logic App workflow calls this to get payments for batch processing.
+    ///
+    /// What it does:
+    /// - Fetches pending payments from the payment queue/database
+    /// - Returns payment ID and amount for each pending payment
+    /// - Logic App then processes each payment through the validation workflow
+    ///
+    /// Workflow Integration:
+    /// 1. Logic App calls GetPendingPayments
+    /// 2. Receives array of payments
+    /// 3. Loops through each payment
+    /// 4. For each payment: CheckDuplicate → EnrichAccount → ValidatePayment
+    ///
+    /// Example Request:
+    /// GET /api/GetPendingPayments
+    ///
+    /// Example Response:
+    /// {
+    ///   "payments": [
+    ///     {"id": "PAY-001", "amount": 1000},
+    ///     {"id": "PAY-002", "amount": 500},
+    ///     {"id": "PAY-003", "amount": 800},
+    ///     {"id": "PAY-004", "amount": 50},
+    ///     {"id": "PAY-006", "amount": 100}
+    ///   ],
+    ///   "totalCount": 5,
+    ///   "retrievedAt": "2026-11-06T08:00:00.000Z",
+    ///   "dataSource": "PaymentQueueDB"
+    /// }
+    ///
+    /// Note: In production, this would query an actual database or message queue.
+    /// </remarks>
+    /// <returns>GetPendingPaymentsResponse with list of pending payments</returns>
+    [HttpGet("GetPendingPayments")]
+    public IActionResult GetPendingPayments()
+    {
+        _logger.LogInformation("GetPendingPayments called - retrieving pending payments");
+
+        return Ok(new GetPendingPaymentsResponse
+        {
+            Payments = PendingPayments,
+            TotalCount = PendingPayments.Count,
+            RetrievedAt = DateTime.UtcNow,
+            DataSource = "PaymentQueueDB"
+        });
     }
 
     /// <summary>

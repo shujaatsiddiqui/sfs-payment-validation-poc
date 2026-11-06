@@ -15,6 +15,29 @@
   "consumes": ["application/json"],
   "produces": ["application/json"],
   "paths": {
+    "/api/GetPendingPayments": {
+      "get": {
+        "summary": "Get Pending Payments",
+        "description": "Retrieves a list of payments waiting to be validated and posted. Used by Logic App to fetch payments for batch processing.",
+        "operationId": "GetPendingPayments",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Pending payments retrieved successfully",
+            "schema": {
+              "$ref": "#/definitions/GetPendingPaymentsResponse"
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
     "/api/CheckDuplicate": {
       "post": {
         "summary": "Check For Duplicate Payment",
@@ -377,6 +400,59 @@
           "type": "string",
           "description": "Error message",
           "x-ms-summary": "Error Message"
+        }
+      }
+    },
+    "PaymentItem": {
+      "type": "object",
+      "required": ["id", "amount"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Payment identifier",
+          "x-ms-summary": "Payment ID",
+          "x-ms-visibility": "important"
+        },
+        "amount": {
+          "type": "number",
+          "format": "double",
+          "description": "Payment amount",
+          "x-ms-summary": "Amount",
+          "x-ms-visibility": "important"
+        }
+      }
+    },
+    "GetPendingPaymentsResponse": {
+      "type": "object",
+      "properties": {
+        "payments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PaymentItem"
+          },
+          "description": "List of pending payments",
+          "x-ms-summary": "Payments",
+          "x-ms-visibility": "important"
+        },
+        "totalCount": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Total number of pending payments",
+          "x-ms-summary": "Total Count",
+          "x-ms-visibility": "important"
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when payments were retrieved",
+          "x-ms-summary": "Retrieved At",
+          "x-ms-visibility": "advanced"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Data source for the payments",
+          "x-ms-summary": "Data Source",
+          "x-ms-visibility": "advanced"
         }
       }
     }
