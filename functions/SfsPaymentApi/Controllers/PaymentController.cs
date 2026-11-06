@@ -10,6 +10,7 @@ public class PaymentController : ControllerBase
 {
     private readonly ILogger<PaymentController> _logger;
     private readonly RulesEngineService _rulesEngineService;
+    private readonly TwilioEmailService _twilioEmailService;
 
     // Mock posted payments database
     private static readonly HashSet<string> PostedPayments = new()
@@ -47,10 +48,14 @@ public class PaymentController : ControllerBase
         new PaymentItem { Id = "PAY-006", Amount = 100 }
     };
 
-    public PaymentController(ILogger<PaymentController> logger, RulesEngineService rulesEngineService)
+    public PaymentController(
+        ILogger<PaymentController> logger,
+        RulesEngineService rulesEngineService,
+        TwilioEmailService twilioEmailService)
     {
         _logger = logger;
         _rulesEngineService = rulesEngineService;
+        _twilioEmailService = twilioEmailService;
     }
 
     /// <summary>
@@ -379,5 +384,80 @@ public class PaymentController : ControllerBase
         }
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// Sends email notification using Twilio Email API.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint sends email notifications for payment validation results or other purposes.
+    /// Uses Twilio Email API with flexible content parameters.
+    ///
+    /// Features:
+    /// - Send to one or multiple recipients
+    /// - HTML email body support
+    /// - Optional plain text fallback
+    /// - Tracking with Twilio message SID
+    ///
+    /// Example Request:
+    /// POST /api/SendEmail
+    /// {
+    ///   "to": ["user@example.com"],
+    ///   "subject": "Payment Validation Result",
+    ///   "htmlBody": "&lt;h2&gt;Payment Approved&lt;/h2&gt;&lt;p&gt;Payment PAY-001 validated successfully.&lt;/p&gt;",
+    ///   "textBody": "Payment Approved\n\nPayment PAY-001 validated successfully."
+    /// }
+    ///
+    /// Example Response (Success):
+    /// {
+    ///   "success": true,
+    ///   "recipientCount": 1,
+    ///   "sentAt": "2026-11-06T17:00:00Z",
+    ///   "message": "Email sent successfully",
+    ///   "messageId": "SM1234567890abcdef"
+    /// }
+    ///
+    /// Example Response (Failure):
+    /// {
+    ///   "success": false,
+    ///   "recipientCount": 0,
+    ///   "sentAt": "2026-11-06T17:00:00Z",
+    ///   "message": "Failed to send email: 401 - Unauthorized"
+    /// }
+    ///
+    /// Note: Requires Twilio Account SID and Auth Token configured in environment variables.
+    /// </remarks>
+    /// <param name="request">Email details including recipients, subject, and body</param>
+    /// <returns>SendEmailResponse with success status and message ID</returns>
+    [HttpPost("SendEmail")]
+    public async Task<IActionResult> SendEmail([FromBody] SendEmailRequest request)
+    {
+        _logger.LogInformation("SendEmail called for {Count} recipient(s)", request.To.Count);
+
+        if (request.To == null || request.To.Count == 0)
+        {
+            return BadRequest(new { error = "At least one recipient email address is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Subject))
+        {
+            return BadRequest(new { error = "Email subject is required" });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.HtmlBody))
+        {
+            return BadRequest(new { error = "Email body is required" });
+        }
+
+        var result = await _twilioEmailService.SendEmailAsync(request);
+
+        if (result.Success)
+        {
+            return Ok(result);
+        }
+        else
+        {
+            return StatusCode(500, result);
+        }
     }
 }

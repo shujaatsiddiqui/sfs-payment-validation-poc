@@ -177,6 +177,44 @@
           }
         }
       }
+    },
+    "/api/SendEmail": {
+      "post": {
+        "summary": "Send Email Notification",
+        "description": "Sends email notification using Twilio Email API with flexible content",
+        "operationId": "SendEmail",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/SendEmailRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Email sent successfully",
+            "schema": {
+              "$ref": "#/definitions/SendEmailResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request - missing required fields",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Failed to send email",
+            "schema": {
+              "$ref": "#/definitions/SendEmailResponse"
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -452,6 +490,76 @@
           "type": "string",
           "description": "Data source for the payments",
           "x-ms-summary": "Data Source",
+          "x-ms-visibility": "advanced"
+        }
+      }
+    },
+    "SendEmailRequest": {
+      "type": "object",
+      "required": ["to", "subject", "htmlBody"],
+      "properties": {
+        "to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Recipient email address(es)",
+          "x-ms-summary": "To",
+          "x-ms-visibility": "important"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject line",
+          "x-ms-summary": "Subject",
+          "x-ms-visibility": "important"
+        },
+        "htmlBody": {
+          "type": "string",
+          "description": "HTML email body content",
+          "x-ms-summary": "HTML Body",
+          "x-ms-visibility": "important"
+        },
+        "textBody": {
+          "type": "string",
+          "description": "Optional plain text body (fallback for non-HTML clients)",
+          "x-ms-summary": "Text Body",
+          "x-ms-visibility": "advanced"
+        }
+      }
+    },
+    "SendEmailResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Indicates if email was sent successfully",
+          "x-ms-summary": "Success",
+          "x-ms-visibility": "important"
+        },
+        "recipientCount": {
+          "type": "integer",
+          "format": "int32",
+          "description": "Number of recipients email was sent to",
+          "x-ms-summary": "Recipient Count",
+          "x-ms-visibility": "important"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when email was sent",
+          "x-ms-summary": "Sent At",
+          "x-ms-visibility": "important"
+        },
+        "message": {
+          "type": "string",
+          "description": "Status message or error details",
+          "x-ms-summary": "Message",
+          "x-ms-visibility": "important"
+        },
+        "messageId": {
+          "type": "string",
+          "description": "Twilio message SID (for tracking)",
+          "x-ms-summary": "Message ID",
           "x-ms-visibility": "advanced"
         }
       }

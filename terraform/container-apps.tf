@@ -50,26 +50,6 @@ resource "azurerm_container_app" "function" {
         value = azurerm_application_insights.sfs.connection_string
       }
 
-      env {
-        name  = "AzureWebJobsStorage"
-        value = azurerm_storage_account.sfs.primary_connection_string
-      }
-
-      env {
-        name  = "FUNCTIONS_WORKER_RUNTIME"
-        value = "dotnet-isolated"
-      }
-
-      env {
-        name  = "AzureWebJobsScriptRoot"
-        value = "/home/site/wwwroot"
-      }
-
-      env {
-        name  = "AzureFunctionsJobHost__Logging__Console__IsEnabled"
-        value = "true"
-      }
-
       # Rules Engine Blob Storage Configuration
       env {
         name  = "BlobStorage__ConnectionString"
@@ -84,6 +64,22 @@ resource "azurerm_container_app" "function" {
       env {
         name  = "BlobStorage__BlobName"
         value = var.rules_blob_name
+      }
+
+      # Twilio SendGrid API Configuration
+      env {
+        name  = "Twilio__ApiKey"
+        value = var.twilio_api_key != "" ? var.twilio_api_key : var.twilio_auth_token
+      }
+
+      env {
+        name  = "Twilio__FromEmail"
+        value = var.twilio_from_email
+      }
+
+      env {
+        name  = "Twilio__FromName"
+        value = var.twilio_from_name
       }
     }
 

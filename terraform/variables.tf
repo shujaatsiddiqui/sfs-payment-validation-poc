@@ -152,3 +152,37 @@ variable "rules_blob_name" {
   type        = string
   default     = "payment-validation-rules.json"
 }
+
+# Twilio SendGrid API Configuration
+variable "twilio_api_key" {
+  description = "SendGrid API Key for email sending (get from Twilio Console > Email API > Integration Guide)"
+  type        = string
+  default     = ""  # Set in terraform.tfvars (gitignored)
+  sensitive   = true
+}
+
+variable "twilio_account_sid" {
+  description = "Twilio Account SID (legacy - not used with SendGrid)"
+  type        = string
+  default     = ""  # Set in terraform.tfvars (gitignored)
+  sensitive   = true
+}
+
+variable "twilio_auth_token" {
+  description = "Twilio Auth Token (used as fallback if ApiKey not set)"
+  type        = string
+  default     = ""  # Set in terraform.tfvars (gitignored)
+  sensitive   = true
+}
+
+variable "twilio_from_email" {
+  description = "Default from email address for SendGrid emails"
+  type        = string
+  default     = ""  # Set in terraform.tfvars (gitignored)
+}
+
+variable "twilio_from_name" {
+  description = "Default from name for SendGrid emails"
+  type        = string
+  default     = "SFS Payment Validation"
+}

@@ -18,6 +18,12 @@ builder.Services.AddSwaggerGen(c =>
 // Register RulesEngineService as singleton (rules loaded once at startup)
 builder.Services.AddSingleton<RulesEngineService>();
 
+// Register HTTP client factory for TwilioEmailService
+builder.Services.AddHttpClient();
+
+// Register TwilioEmailService as scoped
+builder.Services.AddScoped<TwilioEmailService>();
+
 var app = builder.Build();
 
 // Configure HTTP pipeline
