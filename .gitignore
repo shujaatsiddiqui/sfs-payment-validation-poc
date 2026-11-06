@@ -22,6 +22,8 @@ __azurite_db*__.json
 *.tfstate.backup
 *.tfvars
 .terraform.lock.hcl
+tfplan
+*.tfplan
 
 # Docker
 .dockerignore
