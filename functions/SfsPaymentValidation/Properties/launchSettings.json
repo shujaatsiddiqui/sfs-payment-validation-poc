@@ -1,9 +1,0 @@
-{
-  "profiles": {
-    "SfsPaymentValidation": {
-      "commandName": "Project",
-      "commandLineArgs": "--port 7004",
-      "launchBrowser": false
-    }
-  }
-}

@@ -1,0 +1,6 @@
+@SfsPaymentApi_HostAddress = http://localhost:5143
+
+GET {{SfsPaymentApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

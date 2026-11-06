@@ -1,0 +1,398 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "SFS Custom Connectors",
+    "description": "Custom connectors for SFS payment validation workflow - CheckDuplicate, EnrichAccount, ValidatePayment, and legacy SfsValidatePayment",
+    "version": "2.0.0",
+    "contact": {
+      "name": "SFS Payment Validation Team",
+      "email": "support@sfs.com"
+    }
+  },
+  "host": "ca-sfs-payment-validation.purpleglacier-ca7d6433.centralus.azurecontainerapps.io",
+  "basePath": "/",
+  "schemes": ["https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/api/CheckDuplicate": {
+      "post": {
+        "summary": "Check For Duplicate Payment",
+        "description": "Detects if payment has already been posted using composite key (paymentId:amount)",
+        "operationId": "CheckDuplicate",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/DuplicateCheckRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Duplicate check completed",
+            "schema": {
+              "$ref": "#/definitions/DuplicateCheckResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/EnrichAccount": {
+      "post": {
+        "summary": "Enrich Account Data",
+        "description": "Retrieves current account information (balance, status, posting flag) from student financial system",
+        "operationId": "EnrichAccount",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/EnrichAccountRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account data retrieved successfully",
+            "schema": {
+              "$ref": "#/definitions/EnrichAccountResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/ValidatePayment": {
+      "post": {
+        "summary": "Validate Payment with Business Rules",
+        "description": "Applies comprehensive business rules (BR-001 to BR-004) to validate payment. Requires enriched account data.",
+        "operationId": "ValidatePayment",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PaymentValidationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation completed",
+            "schema": {
+              "$ref": "#/definitions/PaymentValidationResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/SfsValidatePayment": {
+      "post": {
+        "summary": "Validate SFS Payment (Legacy)",
+        "description": "Legacy validation endpoint - validates payment against BR-005 and BR-008 only",
+        "operationId": "SfsValidatePayment",
+        "x-ms-visibility": "advanced",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/ValidationRequest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation completed",
+            "schema": {
+              "$ref": "#/definitions/ValidationResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Payment not found",
+            "schema": {
+              "$ref": "#/definitions/ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "DuplicateCheckRequest": {
+      "type": "object",
+      "required": ["paymentId", "amount"],
+      "properties": {
+        "paymentId": {
+          "type": "string",
+          "description": "Payment identifier to check",
+          "x-ms-summary": "Payment ID",
+          "x-ms-visibility": "important"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Payment amount (for composite key)",
+          "x-ms-summary": "Amount",
+          "x-ms-visibility": "important"
+        }
+      }
+    },
+    "DuplicateCheckResponse": {
+      "type": "object",
+      "properties": {
+        "isDuplicate": {
+          "type": "boolean",
+          "description": "True if payment already posted",
+          "x-ms-summary": "Is Duplicate",
+          "x-ms-visibility": "important"
+        },
+        "message": {
+          "type": "string",
+          "description": "Descriptive result message",
+          "x-ms-summary": "Message"
+        },
+        "compositeKey": {
+          "type": "string",
+          "description": "Composite key used (paymentId:amount)",
+          "x-ms-summary": "Composite Key",
+          "x-ms-visibility": "advanced"
+        },
+        "checkedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of check",
+          "x-ms-summary": "Checked At",
+          "x-ms-visibility": "advanced"
+        }
+      }
+    },
+    "EnrichAccountRequest": {
+      "type": "object",
+      "required": ["paymentId"],
+      "properties": {
+        "paymentId": {
+          "type": "string",
+          "description": "Payment ID to lookup account",
+          "x-ms-summary": "Payment ID",
+          "x-ms-visibility": "important"
+        }
+      }
+    },
+    "EnrichAccountResponse": {
+      "type": "object",
+      "properties": {
+        "balance": {
+          "type": "number",
+          "description": "Current account balance",
+          "x-ms-summary": "Balance",
+          "x-ms-visibility": "important"
+        },
+        "status": {
+          "type": "integer",
+          "description": "Account status code (FIC_CLSFD_CD)",
+          "x-ms-summary": "Status Code",
+          "x-ms-visibility": "important"
+        },
+        "closedToPosting": {
+          "type": "integer",
+          "description": "Posting flag (0=open, 1=closed)",
+          "x-ms-summary": "Closed To Posting",
+          "x-ms-visibility": "important"
+        },
+        "enrichedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when data retrieved",
+          "x-ms-summary": "Enriched At",
+          "x-ms-visibility": "advanced"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Data source identifier",
+          "x-ms-summary": "Data Source",
+          "x-ms-visibility": "advanced"
+        }
+      }
+    },
+    "PaymentValidationRequest": {
+      "type": "object",
+      "required": ["paymentId", "amount", "balance", "status", "closedToPosting"],
+      "properties": {
+        "paymentId": {
+          "type": "string",
+          "description": "Payment identifier (for logging)",
+          "x-ms-summary": "Payment ID",
+          "x-ms-visibility": "important"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Payment amount to validate",
+          "x-ms-summary": "Amount",
+          "x-ms-visibility": "important"
+        },
+        "balance": {
+          "type": "number",
+          "description": "Account balance (from EnrichAccount)",
+          "x-ms-summary": "Account Balance",
+          "x-ms-visibility": "important"
+        },
+        "status": {
+          "type": "integer",
+          "description": "Account status code (from EnrichAccount)",
+          "x-ms-summary": "Account Status",
+          "x-ms-visibility": "important"
+        },
+        "closedToPosting": {
+          "type": "integer",
+          "description": "Posting flag (from EnrichAccount)",
+          "x-ms-summary": "Closed To Posting",
+          "x-ms-visibility": "important"
+        }
+      }
+    },
+    "PaymentValidationResponse": {
+      "type": "object",
+      "properties": {
+        "isValid": {
+          "type": "boolean",
+          "description": "True if all validations passed",
+          "x-ms-summary": "Is Valid",
+          "x-ms-visibility": "important"
+        },
+        "paymentType": {
+          "type": "string",
+          "description": "Classification: Standard, Payoff, or Overpayment",
+          "x-ms-summary": "Payment Type",
+          "x-ms-visibility": "important"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of validation errors",
+          "x-ms-summary": "Errors",
+          "x-ms-visibility": "important"
+        },
+        "rulesChecked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Business rules checked",
+          "x-ms-summary": "Rules Checked",
+          "x-ms-visibility": "advanced"
+        },
+        "validatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Validation timestamp",
+          "x-ms-summary": "Validated At",
+          "x-ms-visibility": "advanced"
+        }
+      }
+    },
+    "ValidationRequest": {
+      "type": "object",
+      "required": ["paymentId"],
+      "properties": {
+        "paymentId": {
+          "type": "string",
+          "description": "Payment identifier",
+          "x-ms-summary": "Payment ID",
+          "x-ms-visibility": "important"
+        },
+        "ruleSelection": {
+          "type": "string",
+          "description": "Which rules to apply",
+          "enum": ["All Rules", "BR-005", "BR-008"],
+          "default": "All Rules",
+          "x-ms-summary": "Rule Selection",
+          "x-ms-visibility": "advanced"
+        }
+      }
+    },
+    "ValidationResponse": {
+      "type": "object",
+      "properties": {
+        "isValid": {
+          "type": "boolean",
+          "description": "Validation result",
+          "x-ms-summary": "Is Valid",
+          "x-ms-visibility": "important"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Validation errors",
+          "x-ms-summary": "Errors",
+          "x-ms-visibility": "important"
+        }
+      }
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string",
+          "description": "Error message",
+          "x-ms-summary": "Error Message"
+        }
+      }
+    }
+  },
+  "x-ms-connector-metadata": [
+    {
+      "propertyName": "Website",
+      "propertyValue": "https://sfs-payment-validation.com"
+    },
+    {
+      "propertyName": "Privacy policy",
+      "propertyValue": "https://sfs-payment-validation.com/privacy"
+    },
+    {
+      "propertyName": "Categories",
+      "propertyValue": "Finance;Business Intelligence;Data"
+    }
+  ]
+}
