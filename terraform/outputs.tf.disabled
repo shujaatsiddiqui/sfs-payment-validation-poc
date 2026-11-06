@@ -1,0 +1,136 @@
+# Resource Group
+output "resource_group_name" {
+  description = "Name of the resource group"
+  value       = azurerm_resource_group.sfs.name
+}
+
+output "resource_group_location" {
+  description = "Location of the resource group"
+  value       = azurerm_resource_group.sfs.location
+}
+
+output "resource_group_id" {
+  description = "ID of the resource group"
+  value       = azurerm_resource_group.sfs.id
+}
+
+# Storage Account
+output "storage_account_name" {
+  description = "Name of the storage account"
+  value       = azurerm_storage_account.sfs.name
+}
+
+output "storage_account_id" {
+  description = "ID of the storage account"
+  value       = azurerm_storage_account.sfs.id
+}
+
+# App Service Plan
+output "app_service_plan_name" {
+  description = "Name of the App Service Plan"
+  value       = azurerm_service_plan.sfs.name
+}
+
+output "app_service_plan_id" {
+  description = "ID of the App Service Plan"
+  value       = azurerm_service_plan.sfs.id
+}
+
+# Function App
+output "function_app_name" {
+  description = "Name of the Function App"
+  value       = azurerm_linux_function_app.sfs.name
+}
+
+output "function_app_id" {
+  description = "Resource ID of the Function App"
+  value       = azurerm_linux_function_app.sfs.id
+}
+
+output "function_app_url" {
+  description = "Default hostname of the Function App"
+  value       = "https://${azurerm_linux_function_app.sfs.default_hostname}"
+}
+
+output "function_app_default_hostname" {
+  description = "Default hostname of the Function App"
+  value       = azurerm_linux_function_app.sfs.default_hostname
+}
+
+# Managed Identity
+output "function_app_principal_id" {
+  description = "Principal ID of the Function App's System-Assigned Managed Identity"
+  value       = azurerm_linux_function_app.sfs.identity[0].principal_id
+}
+
+output "function_app_tenant_id" {
+  description = "Tenant ID of the Function App's Managed Identity"
+  value       = azurerm_linux_function_app.sfs.identity[0].tenant_id
+}
+
+# Azure AD Application
+output "azure_ad_app_client_id" {
+  description = "Client ID (Application ID) of the Azure AD Application"
+  value       = azuread_application.function_app.client_id
+}
+
+output "azure_ad_app_object_id" {
+  description = "Object ID of the Azure AD Application"
+  value       = azuread_application.function_app.object_id
+}
+
+output "azure_ad_app_id_uri" {
+  description = "Application ID URI for the Azure AD App"
+  value       = "api://${azuread_application.function_app.client_id}"
+}
+
+# Application Insights
+output "app_insights_name" {
+  description = "Name of Application Insights"
+  value       = azurerm_application_insights.sfs.name
+}
+
+output "app_insights_id" {
+  description = "ID of Application Insights"
+  value       = azurerm_application_insights.sfs.id
+}
+
+output "app_insights_instrumentation_key" {
+  description = "Instrumentation Key for Application Insights"
+  value       = azurerm_application_insights.sfs.instrumentation_key
+  sensitive   = true
+}
+
+output "app_insights_connection_string" {
+  description = "Connection String for Application Insights"
+  value       = azurerm_application_insights.sfs.connection_string
+  sensitive   = true
+}
+
+# Summary Output
+output "deployment_summary" {
+  description = "Summary of deployed resources"
+  value = {
+    resource_group    = azurerm_resource_group.sfs.name
+    location          = azurerm_resource_group.sfs.location
+    function_app_url  = "https://${azurerm_linux_function_app.sfs.default_hostname}"
+    function_endpoint = "https://${azurerm_linux_function_app.sfs.default_hostname}/api/SfsValidatePayment"
+    managed_identity  = azurerm_linux_function_app.sfs.identity[0].principal_id
+    environment       = var.environment
+  }
+}
+
+# Custom Connector Configuration
+output "custom_connector_config" {
+  description = "Configuration values needed for Custom Connector registration"
+  value = {
+    base_url              = "https://${azurerm_linux_function_app.sfs.default_hostname}"
+    api_endpoint          = "/api/SfsValidatePayment"
+    auth_type             = "oauth2"
+    azure_ad_tenant_id    = data.azurerm_client_config.current.tenant_id
+    azure_ad_client_id    = azuread_application.function_app.client_id
+    resource_id           = "api://${azuread_application.function_app.client_id}"
+    authorization_url     = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/oauth2/v2.0/authorize"
+    token_url             = "https://login.microsoftonline.com/${data.azurerm_client_config.current.tenant_id}/oauth2/v2.0/token"
+  }
+}
