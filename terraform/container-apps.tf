@@ -69,6 +69,22 @@ resource "azurerm_container_app" "function" {
         name  = "AzureFunctionsJobHost__Logging__Console__IsEnabled"
         value = "true"
       }
+
+      # Rules Engine Blob Storage Configuration
+      env {
+        name  = "BlobStorage__ConnectionString"
+        value = azurerm_storage_account.rules.primary_connection_string
+      }
+
+      env {
+        name  = "BlobStorage__ContainerName"
+        value = var.rules_container_name
+      }
+
+      env {
+        name  = "BlobStorage__BlobName"
+        value = var.rules_blob_name
+      }
     }
 
     http_scale_rule {

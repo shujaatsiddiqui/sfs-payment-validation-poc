@@ -1,3 +1,5 @@
+using SfsPaymentApi.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services
@@ -12,6 +14,9 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Payment validation API for SFS workflows"
     });
 });
+
+// Register RulesEngineService as singleton (rules loaded once at startup)
+builder.Services.AddSingleton<RulesEngineService>();
 
 var app = builder.Build();
 

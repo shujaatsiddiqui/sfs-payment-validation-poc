@@ -1,45 +1,51 @@
 # SFS Payment Validation - Terraform Infrastructure
 
-This directory contains Terraform configuration for deploying the Azure infrastructure required for the SFS Payment Validation custom connector.
+This directory contains Terraform configuration for deploying the SFS Payment Validation infrastructure to Azure.
 
 ## Architecture
 
 ```
-Azure Resources Created:
+Azure Resources:
 ├── Resource Group (rg-sfs-payment-validation)
-├── Storage Account (stsfspaymentval)
+├── Storage Accounts
+│   ├── stsfspaymentval (Function storage - legacy)
+│   └── stsfspaymentrules (Rules engine blob storage)
+├── Container Registry (ACR)
+├── Container Apps Environment
+├── Container App (SFS Payment API)
 ├── Log Analytics Workspace
-├── Application Insights (appi-sfs-payment-validation)
-├── App Service Plan (Consumption Linux)
-├── Function App (func-sfs-payment-validation)
-│   ├── .NET 10 Isolated Runtime
-│   ├── System-Assigned Managed Identity
-│   └── Azure AD Authentication
-└── Azure AD Application (for OAuth 2.0)
+├── Application Insights
+└── Azure AD Application (OAuth 2.0)
 ```
 
 ## Files
 
 - **providers.tf** - Azure and Azure AD provider configuration
 - **variables.tf** - Input variables with defaults
-- **main.tf** - Main infrastructure resources
-- **outputs.tf** - Output values after deployment
-- **.gitignore** - Terraform-specific gitignore
+- **main.tf** - Resource group, storage, App Insights, Azure AD
+- **container-apps.tf** - Container registry, environment, and app
+- **storage-rules.tf** - Rules engine blob storage
+- **container-apps-outputs.tf** - Container app outputs
+- **storage-rules-outputs.tf** - Rules storage outputs
+- **terraform.tfvars** - Variable values (customize this)
 
 ## Prerequisites
 
-1. **Azure CLI** installed and authenticated
+1. **Azure CLI** installed and authenticated:
    ```bash
    az login
-   az account show
+   az account set --subscription "your-subscription-id"
    ```
 
-2. **Terraform** installed (v1.5.0+)
+2. **Terraform** installed (v1.0+):
    ```bash
-   terraform --version
+   terraform version
    ```
 
-3. **Azure Subscription** with appropriate permissions
+3. **Docker** installed (for building images):
+   ```bash
+   docker --version
+   ```
 
 ## Quick Start
 
@@ -52,41 +58,44 @@ terraform init
 
 ### 2. Review and Customize Variables
 
-Create a `terraform.tfvars` file (optional):
+Edit `terraform.tfvars` to customize your deployment:
 
 ```hcl
-resource_group_name  = "rg-sfs-payment-poc"
-location             = "East US"
-storage_account_name = "stsfspoc20261105"  # Must be globally unique!
-function_app_name    = "func-sfs-payment-poc"
-environment          = "dev"
+resource_group_name         = "rg-sfs-payment-validation"
+location                    = "centralus"
+environment                 = "dev"
+storage_account_name        = "stsfspaymentval"
+rules_storage_account_name  = "stsfspaymentrules"
+container_registry_name     = "acrsfspay1793941559"  # Must be globally unique
+container_app_env_name      = "cae-sfs-payment-validation"
+container_app_name          = "ca-sfs-payment-validation"
 ```
 
-**Important:** `storage_account_name` must be globally unique across all of Azure!
+**Important:** Storage account and container registry names must be globally unique across all of Azure!
 
 ### 3. Plan the Deployment
 
 ```bash
-terraform plan -out=tfplan
+terraform plan
 ```
 
 Review the resources that will be created:
-- ✅ Resource Group
-- ✅ Storage Account
-- ✅ Log Analytics Workspace
-- ✅ Application Insights
-- ✅ App Service Plan
-- ✅ Function App (with Managed Identity)
-- ✅ Azure AD Application
-- ✅ Service Principal
+- Resource group
+- 2 storage accounts (function + rules)
+- Container registry
+- Container app environment
+- Container app with managed identity
+- Application Insights + Log Analytics
+- Azure AD application
+- Role assignments (Container App → Rules Storage)
 
-### 4. Apply the Configuration
+### 4. Apply Configuration
 
 ```bash
-terraform apply tfplan
+terraform apply
 ```
 
-This will take approximately 5-10 minutes.
+Type `yes` when prompted. This will take approximately 5-10 minutes.
 
 ### 5. View Outputs
 
@@ -94,155 +103,221 @@ This will take approximately 5-10 minutes.
 terraform output
 ```
 
-**Key outputs:**
-- `function_app_url` - Function App endpoint
-- `function_app_principal_id` - Managed Identity ID
-- `azure_ad_app_client_id` - Client ID for OAuth
-- `custom_connector_config` - All values needed for Custom Connector
+Key outputs:
+- `container_app_fqdn` - Container app URL
+- `container_registry_login_server` - ACR login server
+- `rules_blob_url` - URL of the uploaded rules file
+- `rules_storage_connection_string` - Connection string (sensitive)
 
-## Important Variables
+## Deployment Workflow
 
-### Required (if not using defaults)
+### Initial Setup
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `subscription_id` | (auto-detected) | Azure Subscription ID |
-| `tenant_id` | (auto-detected) | Azure AD Tenant ID |
+```bash
+# 1. Apply Terraform
+cd terraform
+terraform init
+terraform apply
 
-### Optional (customizable)
+# 2. Build and push Docker image
+cd ../functions/SfsPaymentApi
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `resource_group_name` | rg-sfs-payment-validation | Resource group name |
-| `location` | East US | Azure region |
-| `storage_account_name` | stsfspaymentval | Storage account (must be unique!) |
-| `function_app_name` | func-sfs-payment-validation | Function app name |
-| `app_service_plan_sku` | Y1 (Consumption) | App Service Plan SKU |
-| `dotnet_version` | 10.0 | .NET runtime version |
-| `environment` | dev | Environment tag |
-| `enable_azure_ad_auth` | true | Enable Azure AD authentication |
+# Get ACR name from Terraform output
+ACR_NAME=$(cd ../../terraform && terraform output -raw container_registry_name)
+
+# Login to ACR
+az acr login --name $ACR_NAME
+
+# Build for linux/amd64 and push
+docker buildx build --platform linux/amd64 \
+  -t $ACR_NAME.azurecr.io/sfs-payment-validation:latest \
+  --push .
+
+# 3. Update container app with new image
+az containerapp update \
+  --name ca-sfs-payment-validation \
+  --resource-group rg-sfs-payment-validation \
+  --image $ACR_NAME.azurecr.io/sfs-payment-validation:latest
+
+# 4. Test the API
+CONTAINER_URL=$(cd ../../terraform && terraform output -raw container_app_fqdn)
+curl https://$CONTAINER_URL/api/GetPendingPayments
+```
+
+### Updating Code
+
+```bash
+# 1. Build and push new image
+cd functions/SfsPaymentApi
+ACR_NAME=acrsfspay1793941559  # Or get from terraform output
+
+docker buildx build --platform linux/amd64 \
+  -t $ACR_NAME.azurecr.io/sfs-payment-validation:latest \
+  --push .
+
+# 2. Trigger new revision
+az containerapp update \
+  --name ca-sfs-payment-validation \
+  --resource-group rg-sfs-payment-validation \
+  --image $ACR_NAME.azurecr.io/sfs-payment-validation:latest
+```
+
+### Updating Rules
+
+Rules are automatically uploaded from `docs/templates/payment-validation-rules.json` during `terraform apply`.
+
+**Option 1: Update via Terraform**
+```bash
+# Edit docs/templates/payment-validation-rules.json
+# Then apply changes
+terraform apply -target=azurerm_storage_blob.payment_rules
+```
+
+**Option 2: Update via Azure CLI**
+```bash
+STORAGE_NAME=$(terraform output -raw rules_storage_account_name)
+
+az storage blob upload \
+  --account-name $STORAGE_NAME \
+  --container-name rules \
+  --name payment-validation-rules.json \
+  --file ../docs/templates/payment-validation-rules.json \
+  --overwrite \
+  --auth-mode login
+```
+
+**Option 3: Update via Azure Portal**
+1. Navigate to Storage Account → Containers → `rules`
+2. Click `payment-validation-rules.json`
+3. Click "Edit" and make changes
+4. Save
+
+After updating rules, restart the container app:
+```bash
+az containerapp revision restart \
+  --name ca-sfs-payment-validation \
+  --resource-group rg-sfs-payment-validation
+```
 
 ## Features
 
-### 1. Managed Identity
+### 1. Rules Engine Blob Storage
 
-The Function App is deployed with a **System-Assigned Managed Identity**:
+- **Separate storage account** for rules (stsfspaymentrules)
+- **Blob versioning** enabled for tracking changes
+- **7-day retention** for deleted rules
+- **Automatic upload** from `docs/templates/payment-validation-rules.json`
+- **Role assignment** for container app managed identity
 
-```hcl
-identity {
-  type = "SystemAssigned"
-}
+### 2. Container App with Managed Identity
+
+- **System-assigned managed identity** enabled
+- **Storage Blob Data Reader** role on rules storage
+- **Scale-to-zero** enabled (min_replicas = 0)
+- **Auto-scaling** up to 10 replicas
+
+### 3. Environment Variables
+
+The container app is automatically configured with:
+```
+APPLICATIONINSIGHTS_CONNECTION_STRING
+AzureWebJobsStorage
+FUNCTIONS_WORKER_RUNTIME
+BlobStorage__ConnectionString
+BlobStorage__ContainerName
+BlobStorage__BlobName
 ```
 
-**Benefits:**
-- No need to manage credentials
-- Secure access to Azure resources
-- Used for Custom Connector authentication
+### 4. Application Insights
 
-### 2. Azure AD Authentication
-
-Azure AD OAuth 2.0 authentication is configured:
-
-```hcl
-auth_settings_v2 {
-  auth_enabled = true
-  active_directory_v2 {
-    client_id = azuread_application.function_app.client_id
-    tenant_auth_endpoint = "https://login.microsoftonline.com/{tenant}/v2.0"
-  }
-}
-```
-
-**Configuration:**
-- OAuth 2.0 with Azure AD
-- Token store enabled
-- Initially set to `AllowAnonymous` for testing
-- Can be changed to `RedirectToLoginPage` for production
-
-### 3. Application Insights
-
-Monitoring is configured automatically:
-- Connection string injected into Function App
-- Log Analytics workspace for long-term storage
-- 30-day retention period
-
-### 4. .NET 10 Runtime
-
-Function App configured for .NET 10 isolated worker:
-
-```hcl
-application_stack {
-  dotnet_version              = "10.0"
-  use_dotnet_isolated_runtime = true
-}
-```
+- Monitoring and logging
+- 30-day retention
+- Connected to Log Analytics workspace
 
 ## Outputs
 
-After deployment, Terraform provides these outputs:
-
-### Resource Information
-```bash
-terraform output resource_group_name
-terraform output function_app_url
-terraform output function_app_principal_id
-```
-
-### Custom Connector Configuration
-```bash
-terraform output custom_connector_config
-```
-
-This output provides all values needed to register the Custom Connector:
-- Base URL
-- API endpoint
-- OAuth URLs
-- Client ID
-- Tenant ID
-
-## Post-Deployment Steps
-
-### 1. Deploy Function Code
+Retrieve output values:
 
 ```bash
-cd ../functions/SfsPaymentValidation
-func azure functionapp publish $(terraform -chdir=../../terraform output -raw function_app_name)
+# Container app URL
+terraform output container_app_fqdn
+
+# Container registry
+terraform output container_registry_login_server
+
+# Rules blob URL
+terraform output rules_blob_url
+
+# Connection string (sensitive)
+terraform output -raw rules_storage_connection_string
+
+# All outputs
+terraform output
 ```
 
-### 2. Test the Deployed Function
+## Cost Optimization
+
+- **Container App**: Scale-to-zero enabled (min_replicas = 0)
+- **Storage**: LRS replication (cheapest)
+- **Container Registry**: Basic tier
+- **Application Insights**: 30-day retention
+
+**Estimated monthly cost**: ~$5-10 (mostly Application Insights)
+
+## Managed Identity (Production)
+
+To use managed identity instead of connection string:
+
+1. Update RulesEngineService.cs to support managed identity authentication
+2. Remove connection string and use blob endpoint:
 
 ```bash
-FUNCTION_URL=$(terraform output -raw function_app_url)
-curl -X POST "$FUNCTION_URL/api/SfsValidatePayment" \
-  -H "Content-Type: application/json" \
-  -d '{"paymentId":"PAY-001","ruleSelection":"All Rules"}'
+az containerapp update \
+  --name ca-sfs-payment-validation \
+  --resource-group rg-sfs-payment-validation \
+  --remove-env-vars "BlobStorage__ConnectionString" \
+  --set-env-vars \
+    "BlobStorage__BlobEndpoint=$(terraform output -raw rules_blob_endpoint)" \
+    "BlobStorage__ContainerName=rules" \
+    "BlobStorage__BlobName=payment-validation-rules.json"
 ```
 
-### 3. Register Custom Connector
+The managed identity already has **Storage Blob Data Reader** role assigned by Terraform.
 
-Use the values from `custom_connector_config` output to register the Custom Connector in Azure Portal.
+## Troubleshooting
 
-## Cost Estimation
+### Storage account name already exists
+Storage account names must be globally unique. Update `rules_storage_account_name` in `terraform.tfvars`.
 
-### Consumption Plan (Default - Y1)
+### Container registry name already exists
+Container registry names must be globally unique. Update `container_registry_name` in `terraform.tfvars`.
 
-| Resource | Est. Monthly Cost |
-|----------|-------------------|
-| App Service Plan (Consumption) | $0 (1M executions free) |
-| Storage Account | ~$0.02 |
-| Application Insights | $0 (5GB free) |
-| **Total** | **~$0-5/month** |
+### Container app fails to start
+Check logs:
+```bash
+az containerapp logs show \
+  --name ca-sfs-payment-validation \
+  --resource-group rg-sfs-payment-validation \
+  --follow
+```
 
-### Premium Plan (EP1)
+### Rules not loading
+Verify blob exists:
+```bash
+STORAGE_NAME=$(terraform output -raw rules_storage_account_name)
 
-Change `app_service_plan_sku = "EP1"` in variables:
+az storage blob list \
+  --account-name $STORAGE_NAME \
+  --container-name rules \
+  --auth-mode login \
+  --output table
+```
 
-| Resource | Est. Monthly Cost |
-|----------|-------------------|
-| App Service Plan (EP1) | ~$150/month |
-| Storage Account | ~$0.02 |
-| Application Insights | ~$5 |
-| **Total** | **~$155/month** |
+### Docker build fails
+Ensure you're building for the correct platform:
+```bash
+docker buildx build --platform linux/amd64 ...
+```
 
 ## Cleanup
 
@@ -252,51 +327,22 @@ To destroy all resources:
 terraform destroy
 ```
 
-**Warning:** This will delete all resources including storage, logs, and Function App.
-
-## Troubleshooting
-
-### Storage Account Name Already Taken
-
-**Error:** `StorageAccountAlreadyTaken`
-
-**Solution:** The storage account name must be globally unique. Change it in `terraform.tfvars`:
-
-```hcl
-storage_account_name = "stsfspoc$(date +%s)"
-```
-
-### Authentication Errors
-
-**Error:** `Error authenticating to Azure`
-
-**Solution:** Re-authenticate with Azure CLI:
-
-```bash
-az login
-az account set --subscription "<subscription-id>"
-```
-
-### Terraform State Issues
-
-**Error:** State file conflicts
-
-**Solution:**
-```bash
-terraform init -reconfigure
-terraform refresh
-```
+**Warning:** This will delete all resources including storage, logs, container images, and Container App.
 
 ## Next Steps
 
 1. ✅ Infrastructure deployed
-2. 🔲 Deploy Function App code (Task #7)
-3. 🔲 Register Custom Connector (Task #8)
-4. 🔲 Create Logic App workflow (Task #9)
-5. 🔲 Test end-to-end (Task #10)
+2. 🔲 Build and push Docker image
+3. 🔲 Test API endpoints
+4. 🔲 Update rules in blob storage
+5. 🔲 Configure custom domain (optional)
+6. 🔲 Set up CI/CD pipeline
+7. 🔲 Configure monitoring alerts
+8. 🔲 Implement rule hot reload endpoint
 
 ## Resources
 
-- [Azure Function App Terraform Docs](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/linux_function_app)
-- [Azure AD Application Terraform Docs](https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/application)
+- [Azure Container Apps Terraform Docs](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/container_app)
+- [Azure Storage Blob Terraform Docs](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_blob)
 - [Managed Identity Documentation](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview)
+- [Microsoft Rules Engine](https://microsoft.github.io/RulesEngine/)

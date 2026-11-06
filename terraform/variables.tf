@@ -128,3 +128,27 @@ variable "container_app_name" {
   type        = string
   default     = "ca-sfs-payment-validation"
 }
+
+# Rules Engine Storage Account
+variable "rules_storage_account_name" {
+  description = "Name of the storage account for rules engine (must be globally unique, 3-24 chars, lowercase alphanumeric)"
+  type        = string
+  default     = "stsfspaymentrules"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{3,24}$", var.rules_storage_account_name))
+    error_message = "Storage account name must be 3-24 characters, lowercase letters and numbers only."
+  }
+}
+
+variable "rules_container_name" {
+  description = "Name of the blob container for rules"
+  type        = string
+  default     = "rules"
+}
+
+variable "rules_blob_name" {
+  description = "Name of the rules blob file"
+  type        = string
+  default     = "payment-validation-rules.json"
+}

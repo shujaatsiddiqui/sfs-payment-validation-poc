@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using SfsPaymentValidation.Models;
+using SfsPaymentApi.Services;
 
 namespace SfsPaymentApi.Controllers;
 
@@ -8,6 +9,7 @@ namespace SfsPaymentApi.Controllers;
 public class PaymentController : ControllerBase
 {
     private readonly ILogger<PaymentController> _logger;
+    private readonly RulesEngineService _rulesEngineService;
 
     // Mock posted payments database
     private static readonly HashSet<string> PostedPayments = new()
@@ -45,9 +47,10 @@ public class PaymentController : ControllerBase
         new PaymentItem { Id = "PAY-006", Amount = 100 }
     };
 
-    public PaymentController(ILogger<PaymentController> logger)
+    public PaymentController(ILogger<PaymentController> logger, RulesEngineService rulesEngineService)
     {
         _logger = logger;
+        _rulesEngineService = rulesEngineService;
     }
 
     /// <summary>
@@ -214,6 +217,8 @@ public class PaymentController : ControllerBase
     /// This endpoint applies business rules to validate if a payment can be posted.
     /// Called after account enrichment to determine final payment approval.
     ///
+    /// Uses Microsoft.RulesEngine for JSON-based rule evaluation from rules.json.
+    ///
     /// Business Rules Checked:
     /// - BR-001: Balance must be positive (balance > 0)
     /// - BR-002: Account status 93 blocks posting
@@ -259,35 +264,22 @@ public class PaymentController : ControllerBase
     /// <param name="request">Contains payment details and enriched account data</param>
     /// <returns>PaymentValidationResponse indicating if payment is valid and its classification</returns>
     [HttpPost("ValidatePayment")]
-    public IActionResult ValidatePayment([FromBody] PaymentValidationRequest request)
+    public async Task<IActionResult> ValidatePayment([FromBody] PaymentValidationRequest request)
     {
         _logger.LogInformation("ValidatePayment: {PaymentId}", request.PaymentId);
 
-        var errors = new List<string>();
-
-        // BR-001: Balance must be positive
-        if (request.Balance <= 0)
+        // Create input object for rules engine with lowercase property names (matching rules.json expressions)
+        var paymentData = new
         {
-            errors.Add("Account balance is zero or negative");
-        }
+            paymentId = request.PaymentId,
+            amount = request.Amount,
+            balance = request.Balance,
+            status = request.Status,
+            closedToPosting = request.ClosedToPosting
+        };
 
-        // BR-002: Status 93 blocks posting
-        if (request.Status == 93)
-        {
-            errors.Add("Account status 93 blocks posting");
-        }
-
-        // BR-003: Account must be open to posting
-        if (request.ClosedToPosting == 1)
-        {
-            errors.Add("Account is closed to posting");
-        }
-
-        // BR-004: No overpayments allowed
-        if (request.Amount > request.Balance)
-        {
-            errors.Add("Payment amount exceeds account balance");
-        }
+        // Execute rules using RulesEngine
+        var (isValid, errors, rulesChecked) = await _rulesEngineService.ValidatePaymentAsync(paymentData);
 
         // Classify payment type
         var paymentType = request.Amount < request.Balance ? "Standard"
@@ -296,10 +288,10 @@ public class PaymentController : ControllerBase
 
         return Ok(new PaymentValidationResponse
         {
-            IsValid = errors.Count == 0,
+            IsValid = isValid,
             PaymentType = paymentType,
             Errors = errors,
-            RulesChecked = new List<string> { "BR-001", "BR-002", "BR-003", "BR-004" },
+            RulesChecked = rulesChecked,
             ValidatedAt = DateTime.UtcNow
         });
     }
