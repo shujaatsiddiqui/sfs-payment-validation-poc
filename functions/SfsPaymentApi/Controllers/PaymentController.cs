@@ -40,6 +40,38 @@ public class PaymentController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Checks if a payment has already been posted to prevent duplicate processing.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint detects duplicate payments using a composite key (paymentId:amount).
+    /// Called first in the workflow to skip payments that have already been processed.
+    ///
+    /// Example Request:
+    /// POST /api/CheckDuplicate
+    /// {
+    ///   "paymentId": "PAY-001",
+    ///   "amount": 1000
+    /// }
+    ///
+    /// Example Response (Duplicate Found):
+    /// {
+    ///   "isDuplicate": true,
+    ///   "message": "Payment PAY-001 with amount 1000 already posted",
+    ///   "compositeKey": "PAY-001:1000",
+    ///   "checkedAt": "2026-11-06T07:30:50.363Z"
+    /// }
+    ///
+    /// Example Response (Not Duplicate):
+    /// {
+    ///   "isDuplicate": false,
+    ///   "message": "Payment PAY-001 with amount 500 is unique",
+    ///   "compositeKey": "PAY-001:500",
+    ///   "checkedAt": "2026-11-06T07:30:50.363Z"
+    /// }
+    /// </remarks>
+    /// <param name="request">Contains paymentId and amount to check</param>
+    /// <returns>DuplicateCheckResponse indicating if payment is duplicate</returns>
     [HttpPost("CheckDuplicate")]
     public IActionResult CheckDuplicate([FromBody] DuplicateCheckRequest request)
     {
@@ -59,6 +91,40 @@ public class PaymentController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Retrieves current account information from the student financial system.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint enriches payment data with account details needed for validation.
+    /// Called after duplicate check to gather account balance, status, and posting flags.
+    ///
+    /// What it does:
+    /// - Looks up student account by payment ID
+    /// - Returns current balance, account status code, and closed-to-posting flag
+    /// - Data source: Student Account Database (StudentAccountDB)
+    ///
+    /// Field Descriptions:
+    /// - balance: Current account balance in dollars
+    /// - status: Account status code (10 = Active, 93 = Blocked for posting)
+    /// - closedToPosting: Flag indicating if account accepts new postings (0 = Open, 1 = Closed)
+    ///
+    /// Example Request:
+    /// POST /api/EnrichAccount
+    /// {
+    ///   "paymentId": "PAY-002"
+    /// }
+    ///
+    /// Example Response:
+    /// {
+    ///   "balance": 500.00,
+    ///   "status": 10,
+    ///   "closedToPosting": 0,
+    ///   "enrichedAt": "2026-11-06T07:30:53.593Z",
+    ///   "dataSource": "StudentAccountDB"
+    /// }
+    /// </remarks>
+    /// <param name="request">Contains paymentId to lookup account data</param>
+    /// <returns>EnrichAccountResponse with account balance, status, and posting flag</returns>
     [HttpPost("EnrichAccount")]
     public IActionResult EnrichAccount([FromBody] EnrichAccountRequest request)
     {
@@ -79,6 +145,57 @@ public class PaymentController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Validates payment against comprehensive business rules (BR-001 through BR-004).
+    /// </summary>
+    /// <remarks>
+    /// This endpoint applies business rules to validate if a payment can be posted.
+    /// Called after account enrichment to determine final payment approval.
+    ///
+    /// Business Rules Checked:
+    /// - BR-001: Balance must be positive (balance > 0)
+    /// - BR-002: Account status 93 blocks posting
+    /// - BR-003: Account must be open to posting (closedToPosting = 0)
+    /// - BR-004: No overpayments allowed (amount ≤ balance)
+    ///
+    /// Payment Classification:
+    /// - Standard: Payment amount &lt; account balance
+    /// - Payoff: Payment amount = account balance (pays off entire balance)
+    /// - Overpayment: Payment amount > account balance
+    ///
+    /// Example Request:
+    /// POST /api/ValidatePayment
+    /// {
+    ///   "paymentId": "PAY-002",
+    ///   "amount": 500,
+    ///   "balance": 500.00,
+    ///   "status": 10,
+    ///   "closedToPosting": 0
+    /// }
+    ///
+    /// Example Response (Valid - Payoff):
+    /// {
+    ///   "isValid": true,
+    ///   "paymentType": "Payoff",
+    ///   "errors": [],
+    ///   "rulesChecked": ["BR-001", "BR-002", "BR-003", "BR-004"],
+    ///   "validatedAt": "2026-11-06T08:00:00.000Z"
+    /// }
+    ///
+    /// Example Response (Invalid - Multiple Violations):
+    /// {
+    ///   "isValid": false,
+    ///   "paymentType": "Overpayment",
+    ///   "errors": [
+    ///     "Account balance is zero or negative",
+    ///     "Payment amount exceeds account balance"
+    ///   ],
+    ///   "rulesChecked": ["BR-001", "BR-002", "BR-003", "BR-004"],
+    ///   "validatedAt": "2026-11-06T08:00:00.000Z"
+    /// }
+    /// </remarks>
+    /// <param name="request">Contains payment details and enriched account data</param>
+    /// <returns>PaymentValidationResponse indicating if payment is valid and its classification</returns>
     [HttpPost("ValidatePayment")]
     public IActionResult ValidatePayment([FromBody] PaymentValidationRequest request)
     {
@@ -125,6 +242,56 @@ public class PaymentController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Legacy validation endpoint with selective rule execution support.
+    /// </summary>
+    /// <remarks>
+    /// This endpoint validates payments using a subset of business rules based on rule selection.
+    /// Supports legacy systems that require specific rule validation.
+    ///
+    /// Business Rules:
+    /// - BR-005: Zero Payment Amount (creditAmount must be > 0)
+    /// - BR-008: Account status 93 blocks posting
+    ///
+    /// Rule Selection Options:
+    /// - "All Rules": Checks all applicable rules (BR-005 and BR-008)
+    /// - "BR-005": Checks only zero payment amount rule
+    /// - "BR-008": Checks only status 93 rule
+    ///
+    /// Note: Payment data is looked up from internal database by paymentId.
+    ///
+    /// Example Request:
+    /// POST /api/SfsValidatePayment
+    /// {
+    ///   "paymentId": "PAY-001",
+    ///   "ruleSelection": "All Rules"
+    /// }
+    ///
+    /// Example Response (Valid):
+    /// {
+    ///   "isValid": true,
+    ///   "errors": []
+    /// }
+    ///
+    /// Example Response (Invalid - Zero Amount):
+    /// {
+    ///   "isValid": false,
+    ///   "errors": ["BR-005: Zero Payment Amount"]
+    /// }
+    ///
+    /// Example Response (Invalid - Status 93):
+    /// {
+    ///   "isValid": false,
+    ///   "errors": ["BR-008: Account status 93 blocks posting"]
+    /// }
+    ///
+    /// Example Response (Not Found):
+    /// {
+    ///   "error": "Payment PAY-999 not found"
+    /// }
+    /// </remarks>
+    /// <param name="request">Contains paymentId and rule selection criteria</param>
+    /// <returns>ValidationResponse with validation result and any rule violations</returns>
     [HttpPost("SfsValidatePayment")]
     public IActionResult SfsValidatePayment([FromBody] ValidationRequest request)
     {
