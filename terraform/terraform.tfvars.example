@@ -1,0 +1,35 @@
+# Azure Configuration
+subscription_id = "YOUR_SUBSCRIPTION_ID_HERE"
+location        = "East US"
+environment     = "dev"
+region_code     = "eus"
+business_group  = "payment"
+
+# Required Tags (MANDATORY)
+cost_center = "CC-12345"  # Replace with your cost center code
+owner       = "your.email@stellantis-fs.com"  # Replace with your email
+application = "Payment Validation System"
+
+# Resource Names (optional - defaults provided in variables.tf)
+# Uncomment and modify if you want to override defaults
+# resource_group_name         = "dev-eus-rg-payment-01"
+# container_registry_name     = "deveusacrpayment01"
+# container_app_env_name      = "dev-eus-ace-payment-01"
+# log_analytics_name          = "dev-eus-law-payment-01"
+# custom_connectors_app_name  = "dev-eus-ca-payment-connectors-01"
+# rules_engine_app_name       = "dev-eus-ca-payment-rules-01"
+# react_ui_app_name           = "dev-eus-ca-payment-ui-01"
+
+# Container Apps Scaling (optional - defaults provided)
+# custom_connectors_min_replicas = 0
+# custom_connectors_max_replicas = 10
+# rules_engine_min_replicas      = 0
+# rules_engine_max_replicas      = 5
+# react_ui_min_replicas          = 1
+# react_ui_max_replicas          = 3
+
+# Additional Tags (optional)
+# additional_tags = {
+#   "Project" = "Payment Validation POC"
+#   "Team"    = "Integration"
+# }

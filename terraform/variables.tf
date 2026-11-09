@@ -1,21 +1,19 @@
-# Azure Subscription and Tenant
+# Azure Subscription
 variable "subscription_id" {
-  description = "Azure Subscription ID"
+  description = "Azure Subscription ID for deployment"
   type        = string
-  default     = null # Will use Azure CLI default if not specified
 }
 
-variable "tenant_id" {
-  description = "Azure AD Tenant ID"
+# Environment and Location
+variable "environment" {
+  description = "Environment name (dev, qa, uat, prd)"
   type        = string
-  default     = null # Will use Azure CLI default if not specified
-}
+  default     = "dev"
 
-# Resource Group
-variable "resource_group_name" {
-  description = "Name of the resource group"
-  type        = string
-  default     = "rg-sfs-payment-validation"
+  validation {
+    condition     = contains(["dev", "qa", "uat", "prd"], var.environment)
+    error_message = "Environment must be one of: dev, qa, uat, prd"
+  }
 }
 
 variable "location" {
@@ -24,92 +22,30 @@ variable "location" {
   default     = "East US"
 }
 
-variable "environment" {
-  description = "Environment name (dev, test, prod)"
+variable "region_code" {
+  description = "Region code for naming (eus = East US)"
   type        = string
-  default     = "dev"
+  default     = "eus"
 }
 
-# Storage Account
-variable "storage_account_name" {
-  description = "Name of the storage account (must be globally unique, 3-24 chars, lowercase alphanumeric)"
+variable "business_group" {
+  description = "Business functional group code"
   type        = string
-  default     = "stsfspaymentval"
-
-  validation {
-    condition     = can(regex("^[a-z0-9]{3,24}$", var.storage_account_name))
-    error_message = "Storage account name must be 3-24 characters, lowercase letters and numbers only."
-  }
+  default     = "payment"
 }
 
-# App Service Plan
-variable "app_service_plan_name" {
-  description = "Name of the App Service Plan"
+# Resource Group
+variable "resource_group_name" {
+  description = "Name of the resource group"
   type        = string
-  default     = "plan-sfs-payment-validation"
+  default     = "dev-eus-rg-payment-01"
 }
 
-variable "app_service_plan_sku" {
-  description = "SKU for the App Service Plan (Y1=Consumption, EP1=Elastic Premium, P1V2=Premium)"
-  type        = string
-  default     = "Y1" # Consumption plan for cost optimization
-}
-
-# Function App
-variable "function_app_name" {
-  description = "Name of the Function App"
-  type        = string
-  default     = "func-sfs-payment-validation"
-}
-
-variable "function_runtime_version" {
-  description = "Azure Functions runtime version"
-  type        = string
-  default     = "~4"
-}
-
-variable "dotnet_version" {
-  description = ".NET version for the Function App"
-  type        = string
-  default     = "10.0"
-}
-
-# Application Insights
-variable "app_insights_name" {
-  description = "Name of Application Insights"
-  type        = string
-  default     = "appi-sfs-payment-validation"
-}
-
-# Tags
-variable "tags" {
-  description = "Tags to apply to all resources"
-  type        = map(string)
-  default = {
-    Project     = "SFS Payment Validation"
-    ManagedBy   = "Terraform"
-    Purpose     = "Custom Connector POC"
-  }
-}
-
-# Azure AD Authentication
-variable "enable_azure_ad_auth" {
-  description = "Enable Azure AD authentication for the Function App"
-  type        = bool
-  default     = true
-}
-
-variable "allowed_audiences" {
-  description = "Allowed audiences for Azure AD authentication"
-  type        = list(string)
-  default     = []
-}
-
-# Container Apps Configuration
+# Container Registry
 variable "container_registry_name" {
   description = "Name of the Azure Container Registry (must be globally unique, alphanumeric only)"
   type        = string
-  default     = "acrsfspaymentval"
+  default     = "deveusacrpayment01"
 
   validation {
     condition     = can(regex("^[a-zA-Z0-9]{5,50}$", var.container_registry_name))
@@ -117,72 +53,106 @@ variable "container_registry_name" {
   }
 }
 
+# Container Apps Environment
 variable "container_app_env_name" {
   description = "Name of the Container Apps Environment"
   type        = string
-  default     = "cae-sfs-payment-validation"
+  default     = "dev-eus-ace-payment-01"
 }
 
-variable "container_app_name" {
-  description = "Name of the Container App"
+# Log Analytics Workspace
+variable "log_analytics_name" {
+  description = "Name of Log Analytics Workspace"
   type        = string
-  default     = "ca-sfs-payment-validation"
+  default     = "dev-eus-law-payment-01"
 }
 
-# Rules Engine Storage Account
-variable "rules_storage_account_name" {
-  description = "Name of the storage account for rules engine (must be globally unique, 3-24 chars, lowercase alphanumeric)"
+# Container Apps Configuration
+variable "custom_connectors_app_name" {
+  description = "Name of the Custom Connectors Container App"
   type        = string
-  default     = "stsfspaymentrules"
+  default     = "dev-eus-ca-payment-connectors-01"
+}
+
+variable "rules_engine_app_name" {
+  description = "Name of the Rules Engine Container App"
+  type        = string
+  default     = "dev-eus-ca-payment-rules-01"
+}
+
+variable "react_ui_app_name" {
+  description = "Name of the React UI Container App"
+  type        = string
+  default     = "dev-eus-ca-payment-ui-01"
+}
+
+# Container Apps Scaling Configuration
+variable "custom_connectors_min_replicas" {
+  description = "Minimum number of replicas for Custom Connectors API"
+  type        = number
+  default     = 0 # Scale to zero for cost savings
+}
+
+variable "custom_connectors_max_replicas" {
+  description = "Maximum number of replicas for Custom Connectors API"
+  type        = number
+  default     = 10
+}
+
+variable "rules_engine_min_replicas" {
+  description = "Minimum number of replicas for Rules Engine API"
+  type        = number
+  default     = 0 # Scale to zero for cost savings
+}
+
+variable "rules_engine_max_replicas" {
+  description = "Maximum number of replicas for Rules Engine API"
+  type        = number
+  default     = 5
+}
+
+variable "react_ui_min_replicas" {
+  description = "Minimum number of replicas for React UI"
+  type        = number
+  default     = 1 # Always at least 1 for user access
+}
+
+variable "react_ui_max_replicas" {
+  description = "Maximum number of replicas for React UI"
+  type        = number
+  default     = 3
+}
+
+# Required Tags (per company standards)
+variable "cost_center" {
+  description = "Cost center for billing (required tag)"
+  type        = string
 
   validation {
-    condition     = can(regex("^[a-z0-9]{3,24}$", var.rules_storage_account_name))
-    error_message = "Storage account name must be 3-24 characters, lowercase letters and numbers only."
+    condition     = length(var.cost_center) > 0
+    error_message = "Cost center is required."
   }
 }
 
-variable "rules_container_name" {
-  description = "Name of the blob container for rules"
+variable "owner" {
+  description = "Resource owner email address (required tag)"
   type        = string
-  default     = "rules"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", var.owner))
+    error_message = "Owner must be a valid email address."
+  }
 }
 
-variable "rules_blob_name" {
-  description = "Name of the rules blob file"
+variable "application" {
+  description = "Application name (required tag)"
   type        = string
-  default     = "payment-validation-rules.json"
+  default     = "Payment Validation System"
 }
 
-# Twilio SendGrid API Configuration
-variable "twilio_api_key" {
-  description = "SendGrid API Key for email sending (get from Twilio Console > Email API > Integration Guide)"
-  type        = string
-  default     = ""  # Set in terraform.tfvars (gitignored)
-  sensitive   = true
-}
-
-variable "twilio_account_sid" {
-  description = "Twilio Account SID (legacy - not used with SendGrid)"
-  type        = string
-  default     = ""  # Set in terraform.tfvars (gitignored)
-  sensitive   = true
-}
-
-variable "twilio_auth_token" {
-  description = "Twilio Auth Token (used as fallback if ApiKey not set)"
-  type        = string
-  default     = ""  # Set in terraform.tfvars (gitignored)
-  sensitive   = true
-}
-
-variable "twilio_from_email" {
-  description = "Default from email address for SendGrid emails"
-  type        = string
-  default     = ""  # Set in terraform.tfvars (gitignored)
-}
-
-variable "twilio_from_name" {
-  description = "Default from name for SendGrid emails"
-  type        = string
-  default     = "SFS Payment Validation"
+# Additional Tags
+variable "additional_tags" {
+  description = "Additional tags to apply to resources"
+  type        = map(string)
+  default     = {}
 }

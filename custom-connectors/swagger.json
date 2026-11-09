@@ -1,0 +1,345 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Payment Validation Custom Connector",
+    "description": "Custom connector for payment validation workflow with business rules engine integration",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Payment Integration Team",
+      "email": "payment-team@stellantis-fs.com"
+    }
+  },
+  "host": "dev-eus-ca-payment-connectors-01.azurecontainerapps.io",
+  "basePath": "/api",
+  "schemes": ["https"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/Rules": {
+      "get": {
+        "summary": "Get Available Rules",
+        "description": "Retrieves list of all available business rules from Rules Engine API. Used to populate dropdown in Logic App designer.",
+        "operationId": "GetRules",
+        "responses": {
+          "200": {
+            "description": "List of rules retrieved successfully",
+            "schema": {
+              "$ref": "#/definitions/GetRulesResponse"
+            }
+          }
+        },
+        "x-ms-visibility": "internal"
+      }
+    },
+    "/Validate": {
+      "post": {
+        "summary": "Validate Payment Against Rule",
+        "description": "Executes validation using selected business rule from Rules Engine. Select a rule from the dropdown to validate payment data.",
+        "operationId": "ValidatePayment",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["ruleName", "data"],
+              "properties": {
+                "ruleName": {
+                  "type": "string",
+                  "description": "Select the validation rule to execute",
+                  "title": "Rule Name",
+                  "x-ms-summary": "Rule Name",
+                  "x-ms-dynamic-values": {
+                    "operationId": "GetRules",
+                    "value-path": "name",
+                    "value-title": "displayName",
+                    "value-collection": "rules"
+                  }
+                },
+                "data": {
+                  "$ref": "#/definitions/PaymentData"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation completed",
+            "schema": {
+              "$ref": "#/definitions/ValidateResponse"
+            }
+          }
+        }
+      }
+    },
+    "/GetPaymentData": {
+      "get": {
+        "summary": "Get Payment Data",
+        "description": "Retrieves array of payment data for batch processing. Returns payments that need validation.",
+        "operationId": "GetPaymentData",
+        "responses": {
+          "200": {
+            "description": "Payment data retrieved successfully",
+            "schema": {
+              "$ref": "#/definitions/GetPaymentDataResponse"
+            }
+          }
+        }
+      }
+    },
+    "/PostToSalesforce": {
+      "post": {
+        "summary": "Send to Salesforce Unposted Queue",
+        "description": "Posts invalid payment to Salesforce unposted queue for manual review. Called when validation fails.",
+        "operationId": "PostToSalesforce",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PaymentData"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment posted to Salesforce successfully",
+            "schema": {
+              "$ref": "#/definitions/SalesforceResponse"
+            }
+          }
+        }
+      }
+    },
+    "/PostToLMServicing": {
+      "post": {
+        "summary": "Post to LM Servicing System",
+        "description": "Posts validated payment to Loan Management servicing system for processing. Called when validation passes.",
+        "operationId": "PostToLMServicing",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/PaymentData"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment posted to LM servicing successfully",
+            "schema": {
+              "$ref": "#/definitions/LMServicingResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "PaymentData": {
+      "type": "object",
+      "required": ["effectiveDate", "perfectAccountNumber", "creditAmount", "vin"],
+      "properties": {
+        "effectiveDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Payment effective date (YYYY-MM-DD)",
+          "x-ms-summary": "Effective Date"
+        },
+        "dcbsPeriod": {
+          "type": "string",
+          "description": "DCBS period in YYYYMM format",
+          "x-ms-summary": "DCBS Period"
+        },
+        "perfectAccountNumber": {
+          "type": "string",
+          "description": "Perfect Account Number (PAN) - unique account identifier",
+          "x-ms-summary": "Account Number"
+        },
+        "shortName": {
+          "type": "string",
+          "description": "Customer short name",
+          "x-ms-summary": "Customer Name"
+        },
+        "loanClass1": {
+          "type": "string",
+          "description": "Loan classification code (AUTO, LEASE, etc.)",
+          "x-ms-summary": "Loan Class"
+        },
+        "penalty": {
+          "type": "number",
+          "format": "decimal",
+          "description": "Penalty amount",
+          "x-ms-summary": "Penalty"
+        },
+        "nsf": {
+          "type": "number",
+          "format": "decimal",
+          "description": "NSF (Non-Sufficient Funds) fee",
+          "x-ms-summary": "NSF Fee"
+        },
+        "invoice": {
+          "type": "string",
+          "description": "Invoice number",
+          "x-ms-summary": "Invoice"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Payment notes (optional)",
+          "x-ms-summary": "Notes"
+        },
+        "vin": {
+          "type": "string",
+          "description": "Vehicle Identification Number (17 characters)",
+          "minLength": 17,
+          "maxLength": 17,
+          "x-ms-summary": "VIN"
+        },
+        "creditAmount": {
+          "type": "number",
+          "format": "decimal",
+          "description": "Payment credit amount",
+          "x-ms-summary": "Credit Amount"
+        }
+      }
+    },
+    "GetRulesResponse": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleInfo"
+          },
+          "description": "List of available validation rules"
+        }
+      }
+    },
+    "RuleInfo": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Rule identifier (technical name)",
+          "x-ms-summary": "Rule Name"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Rule display name shown in dropdown",
+          "x-ms-summary": "Display Name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Rule description",
+          "x-ms-summary": "Description"
+        }
+      }
+    },
+    "ValidateResponse": {
+      "type": "object",
+      "properties": {
+        "isValid": {
+          "type": "boolean",
+          "description": "Whether the validation passed",
+          "x-ms-summary": "Is Valid"
+        },
+        "errorMessage": {
+          "type": "string",
+          "description": "Error message if validation failed (null if valid)",
+          "x-ms-summary": "Error Message"
+        },
+        "ruleName": {
+          "type": "string",
+          "description": "Name of the rule that was executed",
+          "x-ms-summary": "Rule Name"
+        },
+        "validatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the validation was performed",
+          "x-ms-summary": "Validated At"
+        }
+      }
+    },
+    "GetPaymentDataResponse": {
+      "type": "object",
+      "properties": {
+        "payments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PaymentData"
+          },
+          "description": "Array of payment data objects"
+        },
+        "totalCount": {
+          "type": "integer",
+          "description": "Total count of payments returned",
+          "x-ms-summary": "Total Count"
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the data was retrieved",
+          "x-ms-summary": "Retrieved At"
+        }
+      }
+    },
+    "SalesforceResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether the post was successful",
+          "x-ms-summary": "Success"
+        },
+        "queueId": {
+          "type": "string",
+          "description": "Salesforce unposted queue record ID",
+          "x-ms-summary": "Queue ID"
+        },
+        "message": {
+          "type": "string",
+          "description": "Message describing the result",
+          "x-ms-summary": "Message"
+        },
+        "postedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the post was made",
+          "x-ms-summary": "Posted At"
+        }
+      }
+    },
+    "LMServicingResponse": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "description": "Whether the post was successful",
+          "x-ms-summary": "Success"
+        },
+        "transactionId": {
+          "type": "string",
+          "description": "LM servicing transaction ID",
+          "x-ms-summary": "Transaction ID"
+        },
+        "message": {
+          "type": "string",
+          "description": "Message describing the result",
+          "x-ms-summary": "Message"
+        },
+        "postedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the post was made",
+          "x-ms-summary": "Posted At"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,250 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {
+      "Get_Payment_Data": {
+        "type": "Http",
+        "inputs": {
+          "method": "GET",
+          "uri": "https://dev-eus-ca-payment-connectors-01.azurecontainerapps.io/api/GetPaymentData"
+        },
+        "runAfter": {}
+      },
+      "Initialize_Results": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "ProcessedCount",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        },
+        "runAfter": {
+          "Get_Payment_Data": ["Succeeded"]
+        }
+      },
+      "Initialize_LM_Count": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "SentToLM",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_Results": ["Succeeded"]
+        }
+      },
+      "Initialize_SF_Count": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "SentToSalesforce",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        },
+        "runAfter": {
+          "Initialize_LM_Count": ["Succeeded"]
+        }
+      },
+      "ForEach_Payment": {
+        "type": "Foreach",
+        "foreach": "@body('Get_Payment_Data')?['payments']",
+        "actions": {
+          "Validate_Data_Rule1": {
+            "type": "Http",
+            "inputs": {
+              "method": "POST",
+              "uri": "https://dev-eus-ca-payment-connectors-01.azurecontainerapps.io/api/Validate",
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "ruleName": "ValidatePaymentData",
+                "data": "@items('ForEach_Payment')"
+              }
+            },
+            "runAfter": {}
+          },
+          "Check_Rule1_Valid": {
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "equals": [
+                    "@body('Validate_Data_Rule1')?['isValid']",
+                    true
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Validate_Account_Posting_Rule2": {
+                "type": "Http",
+                "inputs": {
+                  "method": "POST",
+                  "uri": "https://dev-eus-ca-payment-connectors-01.azurecontainerapps.io/api/Validate",
+                  "headers": {
+                    "Content-Type": "application/json"
+                  },
+                  "body": {
+                    "ruleName": "ValidateAccountPosting",
+                    "data": "@items('ForEach_Payment')"
+                  }
+                },
+                "runAfter": {}
+              },
+              "Check_Rule2_Valid": {
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "equals": [
+                        "@body('Validate_Account_Posting_Rule2')?['isValid']",
+                        true
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Post_To_LM_Servicing": {
+                    "type": "Http",
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "https://dev-eus-ca-payment-connectors-01.azurecontainerapps.io/api/PostToLMServicing",
+                      "headers": {
+                        "Content-Type": "application/json"
+                      },
+                      "body": "@items('ForEach_Payment')"
+                    },
+                    "runAfter": {}
+                  },
+                  "Increment_LM_Count": {
+                    "type": "IncrementVariable",
+                    "inputs": {
+                      "name": "SentToLM",
+                      "value": 1
+                    },
+                    "runAfter": {
+                      "Post_To_LM_Servicing": ["Succeeded"]
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Post_To_Salesforce_Rule2_Failed": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "https://dev-eus-ca-payment-connectors-01.azurecontainerapps.io/api/PostToSalesforce",
+                        "headers": {
+                          "Content-Type": "application/json"
+                        },
+                        "body": "@items('ForEach_Payment')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Increment_SF_Count_Rule2": {
+                      "type": "IncrementVariable",
+                      "inputs": {
+                        "name": "SentToSalesforce",
+                        "value": 1
+                      },
+                      "runAfter": {
+                        "Post_To_Salesforce_Rule2_Failed": ["Succeeded"]
+                      }
+                    }
+                  }
+                },
+                "runAfter": {
+                  "Validate_Account_Posting_Rule2": ["Succeeded"]
+                }
+              }
+            },
+            "else": {
+              "actions": {
+                "Post_To_Salesforce_Rule1_Failed": {
+                  "type": "Http",
+                  "inputs": {
+                    "method": "POST",
+                    "uri": "https://dev-eus-ca-payment-connectors-01.azurecontainerapps.io/api/PostToSalesforce",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": "@items('ForEach_Payment')"
+                  },
+                  "runAfter": {}
+                },
+                "Increment_SF_Count_Rule1": {
+                  "type": "IncrementVariable",
+                  "inputs": {
+                    "name": "SentToSalesforce",
+                    "value": 1
+                  },
+                  "runAfter": {
+                    "Post_To_Salesforce_Rule1_Failed": ["Succeeded"]
+                  }
+                }
+              }
+            },
+            "runAfter": {
+              "Validate_Data_Rule1": ["Succeeded"]
+            }
+          },
+          "Increment_Processed": {
+            "type": "IncrementVariable",
+            "inputs": {
+              "name": "ProcessedCount",
+              "value": 1
+            },
+            "runAfter": {
+              "Check_Rule1_Valid": ["Succeeded"]
+            }
+          }
+        },
+        "runAfter": {
+          "Initialize_SF_Count": ["Succeeded"]
+        }
+      },
+      "Response": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "status": "Batch processing completed",
+            "totalProcessed": "@variables('ProcessedCount')",
+            "sentToLM": "@variables('SentToLM')",
+            "sentToSalesforce": "@variables('SentToSalesforce')",
+            "completedAt": "@utcNow()"
+          }
+        },
+        "runAfter": {
+          "ForEach_Payment": ["Succeeded"]
+        }
+      }
+    },
+    "triggers": {
+      "Recurrence": {
+        "type": "Recurrence",
+        "recurrence": {
+          "frequency": "Minute",
+          "interval": 3
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "kind": "Stateful"
+}
